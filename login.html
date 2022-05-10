@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOGIN | MEGA PIXEL WORLD</title>
+    <link rel="stylesheet" href="/login.css">
+    <script src="https://kit.fontawesome.com/e4f8fc500a.js" crossorigin="anonymous"></script>
+    <script></script>
+</head>
+<body>
+    <div class="home">
+        <a href="/index.html"><i class="fa-solid fa-house"></i></a>
+    </div>
+    <div class="before-con">
+    <div class="container">
+    <form action="#">
+        <h1 class="title">LOGIN</h1>
+        <p class="tit">Welcome back to Pixel World !!!</p>
+        <hr>
+        <div class="form__mes form__mes-err"></div>
+        <div class="input-form">
+            <label for="email"><b>Email</b></label>
+            <input type="text" placeholder="Enter your Email" name="email" required>
+            <i class="fa-solid fa-envelope icon"></i>
+        </div>
+        <div class="input-form">
+            <label for="username"><b>Username</b></label>
+            <input type="text" placeholder="Choose your Username" name="username" required>
+            <i class="fa-solid fa-user icon"></i>
+        </div>
+        <div class="input-form">
+            <label for="password"><b>Password</b></label>
+            <input type="password" placeholder="Choose your Password" name="password" required>
+            <i class="fa-solid fa-lock icon"></i>
+            <i id="hide" class="fa-solid fa-eye-slash showhide"></i>
+        </div>
+        <label class="rm">
+            <input type="checkbox" checked="checked" name="remember" style="margin:15px 10px 0 15px">
+            <p class="bott-rm"> Remember me !!!</p>
+        </label>
+        <p class="bott">
+            Forgot <a href="#" style="color:gold">your Password
+            </a>.</p>
+        <p class="bott">
+            Don't have an account? Don't worry. Please <a href="/join us.html" style="color:gold">Join us
+            </a>.</p>
+        <div class="clearfix">
+            <button type="submit" class="login">Login</button>
+          </div>
+    </form>
+    </div>
+    </div>
+    <script src="showhide.js"></script>
+</body>
+</html>
