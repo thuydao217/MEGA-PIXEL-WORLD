@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using TinyCsvParser.Mapping;
+using TinyCsvParser;
+using System.Reflection.Emit;
+using System.Runtime.ConstrainedExecution;
+using System.IO;
+
+namespace FCT
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private string FixCsvLine(string line)
+        {
+            var columns = line.Split(',');
+            if (columns.Length < 6)
+            {
+                // Bổ sung các cột trống cho đến khi đạt được 6 cột
+                line += new string(',', 6 - columns.Length);
+            }
+            return line;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string filePath = @"C:\Users\ACER\OneDrive\Máy tính\fct.csv";
+
+                // Định nghĩa textbox
+                int inValue = int.Parse(txtInput.Text);
+                int roValue = int.Parse(txtRouter.Text);
+                int transValue = int.Parse(txtTransfer.Text);
+
+                // Định nghĩa thời gian kíp sáng và kíp tối
+                TimeSpan startDayShift = new TimeSpan(8, 0, 0), endDayShift = new TimeSpan(20, 0, 0);
+                TimeSpan startNightShift = new TimeSpan(20, 0, 0), endNightShift = new TimeSpan(8, 0, 0);
+
+                // Đọc file CSV và xử lý các dòng
+                var lines = File.ReadAllLines(filePath, Encoding.UTF8)
+                                .Select(line => FixCsvLine(line))
+                                .ToList();
+
+                var csvParser = new CsvParser<MyCsvModel>(new CsvParserOptions(true, ','), new CsvMapping());
+                var records = csvParser.ReadFromString(new CsvReaderOptions(new[] { Environment.NewLine }), string.Join(Environment.NewLine, lines))
+                                       .Select(r => r.Result)
+                                       .Where(r => r != null && !string.IsNullOrWhiteSpace(r.DateTime)) // Loại bỏ dòng trống
+                                       .ToList();
+
+                // Phân loại và lọc bản ghi hợp lệ
+                var dayShiftRecords = records
+                    .Where(r => TimeSpan.TryParse(r.Time, out TimeSpan time) && time >= startDayShift && time <= endDayShift)
+                    .ToList();
+
+                var nightShiftRecords = records
+                    .Where(r => TimeSpan.TryParse(r.Time, out TimeSpan time) && (time >= startNightShift || time < endNightShift))
+                    .ToList();
+
+                // Hiển thị kết quả thời gian cho kíp sáng
+                if (dayShiftRecords.Any())
+                {
+                    DayTimeLabel.Text = $"Kíp sáng: {dayShiftRecords.First().Time} - {dayShiftRecords.Last().Time}";
+                }
+                else
+                {
+                    DayTimeLabel.Text = "Không tìm thấy khoảng thời gian trong kíp sáng.";
+                }
+
+                // Hiển thị kết quả thời gian cho kíp tối
+                if (nightShiftRecords.Any())
+                {
+                    NightTimeLabel.Text = $"Kíp tối: {nightShiftRecords.First().Time} - {nightShiftRecords.Last().Time}";
+                }
+                else
+                {
+                    NightTimeLabel.Text = "Không tìm thấy khoảng thời gian trong kíp tối.";
+                }
+
+                // Đếm số lượng 'ok' và 'ng' cho kíp sáng
+                int okCountDayShift = dayShiftRecords.Count(r => r.Result == "PASS" && !string.IsNullOrEmpty(r.SaveSerialAddress));
+                int ngCountDayShift = dayShiftRecords.Count(r =>
+                    r.Result == "FAIL" ||
+                    (r.Result == "PASS" && string.IsNullOrEmpty(r.SaveSerialAddress))
+                );
+
+                // Đếm số lượng 'ok' và 'ng' cho kíp tối
+                int okCountNightShift = nightShiftRecords.Count(r => r.Result == "PASS" && !string.IsNullOrEmpty(r.SaveSerialAddress));
+                int ngCountNightShift = nightShiftRecords.Count(r =>
+                    r.Result == "FAIL" ||
+                    (r.Result == "PASS" && string.IsNullOrEmpty(r.SaveSerialAddress))
+                );
+
+                //Hiển thị kết quả 'ng' và 'ok'
+                DayNgCountLabel.Text = $"{ngCountDayShift}";
+                DayOkCountLabel.Text = $"{okCountDayShift}";
+                NightOkCountLabel.Text = $"{okCountNightShift}";
+                NightNgCountLabel.Text = $"{ngCountNightShift}";
+
+                //Hiển thị tổng số lượng 'ng' và 'ok'
+                int totalNgCount = ngCountDayShift + ngCountNightShift;
+                int totalOkCount = okCountDayShift + okCountNightShift;
+                SumLabel.Text = $"Total NG: {totalNgCount} - Total OK: {totalOkCount}";
+
+                // Kiểm tra số lượng 'ok' với giá trị 'in', 'ro', 'trans'
+                ResultCompareLabel.Text = totalOkCount == inValue ? "ok: ok = in" :
+                      totalOkCount < roValue ? $"có bất thường: ok < ro {roValue - totalOkCount} bản" :
+                      totalOkCount < transValue ? $"có bất thường: ok < trans {transValue - totalOkCount} bản" :
+                      "Không có bất thường";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "ERROR", MessageBoxButtons.RetryCancel, MessageBoxIcon.Error);
+            }
+        }
+    }
+    public class MyCsvModel
+    {
+        public string DateTime { get; set; }  // Cột đầu tiên
+        public string Result { get; set; }    // Cột thứ 3
+        public string SaveSerialAddress { get; set; } // Cột thứ 5
+        public string Time => DateTime?.Split('-').Last().Trim().Trim('"'); // Lấy phần thời gian, kiểm tra null
+    }
+
+    public class CsvMapping : CsvMapping<MyCsvModel>
+    {
+        public CsvMapping() : base()
+        {
+            MapProperty(0, x => x.DateTime);             // Ánh xạ cột đầu tiên
+            MapProperty(1, x => x.Result);               // Ánh xạ cột thứ 3 (Result)
+            MapProperty(4, x => x.SaveSerialAddress);
+        }
+    }
+}
