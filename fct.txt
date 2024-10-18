@@ -143,3 +143,338 @@ namespace FCT
         }
     }
 }
+
+//connectdata----------------------------------------------------------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Data;
+using System.Drawing;
+
+using System.Net.NetworkInformation;
+
+
+using System.Windows.Forms;
+using System.Threading.Tasks;
+
+namespace RouterFeederList
+
+{
+    class ConnectData
+    {
+        public static string function = "";
+        public static string source;
+        public static SqlConnection con = new SqlConnection();
+        public static string op_check, model, cell, des;
+        public static string version = "Version: Oct 2023";
+
+        //public static string read_serverID()
+        //{
+        //    StreamReader sw = new StreamReader(Directory.GetCurrentDirectory() + @"\" + "ServerID.txt");
+        //    return sw.ReadLine();
+        //}
+
+        public static bool PingToAddress(string IP)
+        {
+            try
+            {
+                Ping PingSender = new Ping();
+                int TimeOut = 120;
+                string PingData = "aaaa";
+                byte[] Buffer = System.Text.Encoding.ASCII.GetBytes(PingData);
+
+                PingReply PingReply = PingSender.Send(IP, TimeOut, Buffer);
+
+                if (PingReply.Status == IPStatus.Success)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch { return false; }
+        }
+
+        static ConnectData()
+        {
+            if (PingToAddress("10.255.136.13"))
+            {
+                source = @"Data Source=10.255.136.13\SQLEXPRESS;Database=ROUTER;User ID=sa;Password=admin!23";
+            }
+            else if (PingToAddress("192.168.173.96"))
+            {
+                source = @"Data Source=192.168.173.96\SQLEXPRESS;Initial Catalog=DEV_FINISH_GOOD;User ID=sa;Password=admin!23";
+            }
+            else
+            {
+                source = @"Data Source=pdc122;Initial Catalog=DEV_FINISH_GOOD;User ID=sa;Password=assy@123";
+            }
+            // source = @"server=tl-assysv\SQLExpress;Initial Catalog=Check_Sheet;User ID=sa;Password=assy@123";
+
+            con = new SqlConnection(source);
+            if (con.State == ConnectionState.Open)
+            {
+                con.Open();
+            }
+            else if (con.State == ConnectionState.Closed)
+            {
+                con.Close();
+            }
+        }
+
+
+        public static List<string> getSchema(string IP)
+        {
+            string sourceServer = $"Data Source={IP};User ID=sa;Password=admin!23";
+            List<string> dataBaseList = new List<string>();
+            try
+            {
+
+                using (SqlConnection conn = new SqlConnection(sourceServer))
+                {
+                    conn.Open();
+                    string query = "SELECT name FROM sys.databases";
+                    using (SqlCommand cmd = new SqlCommand(query, conn))
+                    {
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                string dbName = reader["name"].ToString();
+                                dataBaseList.Add(dbName);
+                            }
+                        }
+                    }
+
+                    conn.Close();
+                    return dataBaseList;
+                }
+            }
+            catch (SqlException ex)
+            {
+                MessageBox.Show("Datatable không có dữ liệu! Liên hệ PCB-IT.");
+                return null;
+            }
+        }
+
+        public static async Task<string> backUpdataBase(string IP, string dataBaseName, string pathToBackup)
+        {
+            string sourceServer = $"Data Source={IP};User ID=sa;Password=admin!23";
+            List<string> dataBaseList = new List<string>();
+            DateTime currentTime = DateTime.Now;
+            string formattedDateTime = currentTime.ToString("dd-MM-dd HH_mm_ss");
+            try
+            {
+
+                using (SqlConnection conn = new SqlConnection(sourceServer))
+                {
+                    string path = $"{pathToBackup}\\{dataBaseName}_{formattedDateTime}_backup.bak";
+                    string fileName = $"{dataBaseName}_{formattedDateTime}_backup.bak";
+                    conn.Open();
+                    string query = $"BACKUP DATABASE {dataBaseName} TO DISK = N'{path}' WITH NOFORMAT, NOINIT, NAME = N'DEV_FINISH_GOOD-Full Database Backup', SKIP, NOREWIND, NOUNLOAD,  STATS = 10";
+                    var backupTask = Task.Run(() => PerformBackup(query, conn));
+
+                    await backupTask;
+
+                    conn.Close();
+                    //MessageBox.Show("BackUp thành công!");
+                    return fileName;
+                }
+            }
+            catch (SqlException ex)
+            {
+                MessageBox.Show("BackUp không thành công!");
+                return "";
+            }
+        }
+        public static void PerformBackup(string query, SqlConnection conn)
+        {
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.CommandTimeout = 0;
+                cmd.ExecuteNonQuery();
+            }
+        }
+        public static void open()
+        {
+            try
+            {
+                con.Open();
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+            finally
+            {
+                con.Dispose();
+            }
+        }
+
+        //lấy dữ liệu từ bảng
+        public static DataTable DataTable_Sql(string sql)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(source))
+                {
+                    using (SqlDataAdapter dap = new SqlDataAdapter(sql, conn))
+                    {
+                        using (DataSet ds = new DataSet())
+                        {
+                            dap.Fill(ds);
+                            conn.Close();
+                            conn.Dispose();
+                            return ds.Tables[0];
+                        }
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                //MessageBox.Show("Datatable không có dữ liệu! Liên hệ PCB-IT.");
+                return null;
+            }
+        }
+
+        //Sử dụng Insert, update, delete...
+        public static int Execute_NonSQL(string sql)
+        {
+            try
+            {
+                SqlConnection conn = new SqlConnection(source);
+                SqlCommand cmd = new SqlCommand(sql, conn);
+                int row = 0;
+                conn.Open();
+                cmd.CommandType = CommandType.Text;
+                cmd.CommandText = sql;
+                row = cmd.ExecuteNonQuery();
+
+                conn.Dispose();
+                conn.Close();
+                return row;
+            }
+            catch (SqlException e)
+            {
+                if (e.ErrorCode == -2146232060)
+                {
+                    MessageBox.Show("Lỗi! Liên hệ IT-PCB!");
+                }
+
+                return 0;
+            }
+        }
+
+        public static bool ExecuteSP(string sp_name, string[] parameters, string[] values)
+        {
+            try
+            {
+                SqlConnection conn = new SqlConnection(source);
+                SqlCommand cmd = new SqlCommand(sp_name, conn);
+                conn.Open();
+                cmd.CommandType = CommandType.StoredProcedure;
+                SqlParameter p;
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    p = new SqlParameter(parameters[i], values[i]);
+                    cmd.Parameters.Add(p);
+                }
+                //return cmd.ExecuteNonQuery();
+                cmd.ExecuteNonQuery();
+                conn.Close();
+                conn.Dispose();
+                return true;
+            }
+            catch (SqlException ex)
+            {
+                MessageBox.Show("Lỗi! " + ex.Message);
+                return false;
+            }
+        }
+
+        public static DataTable FillStore_NoParam(string sp_name, params object[] obj)
+        {
+            using (SqlConnection conn = new SqlConnection(source))
+            {
+                conn.Open();
+
+                SqlCommand cmd = new SqlCommand(sp_name, conn);
+                cmd.CommandType = CommandType.StoredProcedure;
+                SqlCommandBuilder.DeriveParameters(cmd);
+                for (int i = 1; i <= obj.Length; i++)
+                {
+                    cmd.Parameters[i].Value = obj[i - 1];
+                }
+                SqlDataAdapter dap = new SqlDataAdapter(cmd);
+                DataSet ds = new DataSet();
+                //cmd.ExecuteNonQuery();
+                dap.Fill(ds);
+                conn.Dispose();
+                conn.Close();
+                return ds.Tables[0];
+            }
+        }
+
+        //Function dùng chung
+
+        public static void LoadTienTrinh(DataGridView dgTienTrinh, string line, string status)
+        {
+
+            string dateshowfirst = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd") + " 08:00";
+
+            DataTable dt;
+            if (status == "")
+            {
+                dt = ConnectData.DataTable_Sql("select ROW_NUMBER () over (order by(select TimeCreate)) as No, * from (select distinct CarId,PartNo,ZoneName,CONVERT(VARCHAR(5),TimeCreate,108) as Time,TimeCreate  from dbo.PCBOut where isnull(PDCConfirm,'') not like N'Đã return' and TimeCreate > '" + dateshowfirst + "' and (CarID like '%" + line + "%' or PartNo like '%" + line + "%') ) as T order by TimeCreate desc");
+            }
+            else
+            {
+                dt = ConnectData.DataTable_Sql("select ROW_NUMBER () over (order by(select TimeCreate)) as No, * from (select distinct CarId,PartNo,ZoneName,CONVERT(VARCHAR(5),TimeCreate,108) as Time,TimeCreate  from dbo.PCBOut where isnull(PDCConfirm,'') not like N'Đã return' and TimeCreate > '" + dateshowfirst + "' and (CarID like '%" + line + "%' or PartNo like '%" + line + "%') and PDCConfirmFinal is null) as T order by TimeCreate desc");
+            }
+
+            dgTienTrinh.AutoGenerateColumns = false;
+            dgTienTrinh.DataSource = dt;
+            //for (int i = 0; i < dgTienTrinh.Rows.Count - 1; i++)
+            //{
+            //    dgTienTrinh.Rows[i].DefaultCellStyle.BackColor = Color.Yellow;
+            //}
+
+            string allcar = "";
+
+            var dtCheck = ConnectData.DataTable_Sql("select distinct CarID from PCBOut where PDCConfirmFinal is not null and isnull(PDCConfirm,'') not like N'Đã return' and Convert(date,TimeCreate) > '" + DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd") + "'");
+            for (int i = 0; i < dtCheck.Rows.Count; i++)
+            {
+                allcar += dtCheck.Rows[i]["CarID"].ToString().ToUpper() + ",";
+            }
+
+            for (int i = 0; i < dgTienTrinh.Rows.Count - 1; i++)
+            {
+                dgTienTrinh.Rows[i].DefaultCellStyle.BackColor = Color.Yellow;
+
+
+                string time1 = DateTime.Now.ToString("yyyy-MM-dd") + " " + dgTienTrinh.Rows[i].Cells["_Time"].Value.ToString();
+                string time2 = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+
+                TimeSpan test = Convert.ToDateTime(time2) - Convert.ToDateTime(time1);
+                var minute = test.TotalMinutes;
+                if (minute > 30)
+                {
+                    dgTienTrinh.Rows[i].DefaultCellStyle.BackColor = Color.OrangeRed;
+                }
+                else
+                {
+                    dgTienTrinh.Rows[i].DefaultCellStyle.BackColor = Color.LightYellow;
+                }
+
+                if (allcar.Contains(dgTienTrinh.Rows[i].Cells["_CarId"].Value.ToString().ToUpper()))
+                {
+                    dgTienTrinh.Rows[i].DefaultCellStyle.BackColor = Color.LightGreen;
+                }
+            }
+        }
+    }
+}
